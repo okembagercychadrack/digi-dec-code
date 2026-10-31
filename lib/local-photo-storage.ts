@@ -7,26 +7,6 @@ export const LOCAL_PHOTO_DIRECTORY = join(process.cwd(), "uploads");
 
 export class InvalidPhotoError extends Error {}
 
-export function hasUploadThingToken(): boolean {
-  const token = process.env.UPLOADTHING_TOKEN?.trim();
-  if (!token) return false;
-
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
-    if (!parsed || typeof parsed !== "object") return false;
-    const value = parsed as Record<string, unknown>;
-    return (
-      typeof value.apiKey === "string" &&
-      value.apiKey.length > 0 &&
-      typeof value.appId === "string" &&
-      value.appId.length > 0 &&
-      Array.isArray(value.regions) &&
-      value.regions.every((region) => typeof region === "string")
-    );
-  } catch {
-    return false;
-  }
-}
 
 const IMAGE_TYPES = {
   "image/jpeg": { extension: "jpg", signature: (bytes: Buffer) => bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff },
