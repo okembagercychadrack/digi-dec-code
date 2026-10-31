@@ -13,7 +13,12 @@ interface Props {
   disabled?: boolean;
 }
 
-export function PhotoUploadField({ value, onChange, initials = "?", disabled }: Props) {
+export function PhotoUploadField({
+  value,
+  onChange,
+  initials = "?",
+  disabled,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -28,13 +33,15 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
 
     setError(null);
     setNotice(null);
+
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setError("Choisis une image JPG, PNG ou WebP.");
       e.target.value = "";
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      setError("La photo doit faire 4 Mo maximum.");
+
+    if (file.size === 0 || file.size > MAX_FILE_SIZE) {
+      setError("La photo doit faire entre 1 octet et 4 Mo.");
       e.target.value = "";
       return;
     }
@@ -44,48 +51,32 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
     setUploading(true);
 
     try {
-      let photoUrl: string | null = null;
-      const uploadConfigResponse = await fetch("/api/uploads", { cache: "no-store" });
-      if (!uploadConfigResponse.ok) {
-        throw new Error("Impossible de vérifier le service d’hébergement des photos.");
-      }
-      const uploadConfig = await uploadConfigResponse.json();
+      const uploadedFiles = await uploadFiles("agentPhoto", {
+        files: [file],
+      });
 
-      if (uploadConfig.remoteAvailable === true) {
-        try {
-          const uploadedFiles = await uploadFiles("agentPhoto", { files: [file] });
-          photoUrl = uploadedFiles[0]?.ufsUrl ?? null;
-        } catch (uploadThingError) {
-          console.warn("[PhotoUploadField] UploadThing indisponible, envoi local.", uploadThingError);
-        }
-      }
+      const photoUrl = uploadedFiles[0]?.ufsUrl;
 
       if (!photoUrl) {
-        const body = new FormData();
-        body.set("file", file);
-        const response = await fetch("/api/uploads", { method: "POST", body });
-        const result = await response.json();
-        if (!response.ok || typeof result.url !== "string") {
-          throw new Error(typeof result.error === "string" ? result.error : "Enregistrement de la photo impossible.");
-        }
-        photoUrl = result.url;
-        setNotice("Photo prête sur ce serveur. Enregistre l’agent pour la conserver.");
-      } else {
-        setNotice("Photo prête. Enregistre l’agent pour la conserver.");
+        throw new Error("UploadThing n'a retourné aucune adresse de photo.");
       }
 
       onChange(photoUrl);
+      setNotice("Photo envoyée avec succès. Enregistre l’agent pour la conserver.");
     } catch (err) {
       console.error("[PhotoUploadField]", err);
-      const details = err instanceof Error ? err.message : "Erreur inconnue.";
-      setError(
-        `Impossible d’ajouter cette photo. ${details}`
-      );
+      const details =
+        err instanceof Error ? err.message : "Erreur inconnue.";
+
+      setError(`Impossible d’ajouter cette photo. ${details}`);
     } finally {
       setUploading(false);
       setLocalPreview(null);
       URL.revokeObjectURL(objectUrl);
-      if (inputRef.current) inputRef.current.value = "";
+
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
     }
   }
 
@@ -94,7 +85,10 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
     setLocalPreview(null);
     setError(null);
     setNotice(null);
-    if (inputRef.current) inputRef.current.value = "";
+
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
   }
 
   return (
@@ -107,6 +101,7 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
           onClick={() => {
             const input = inputRef.current;
             if (!input) return;
+
             if (typeof input.showPicker === "function") input.showPicker();
             else input.click();
           }}
@@ -115,7 +110,11 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
         >
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Aperçu de la photo" className="h-full w-full object-cover" />
+            <img
+              src={preview}
+              alt="Aperçu de la photo"
+              className="h-full w-full object-cover"
+            />
           ) : (
             <span>{initials}</span>
           )}
@@ -134,6 +133,7 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
             </span>
           )}
         </button>
+
         <input
           ref={inputRef}
           type="file"
@@ -146,9 +146,20 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
       </div>
 
       <div className="flex flex-col gap-1 pt-1">
-        <p className="text-sm font-medium text-slate-700">Photo de l&apos;agent</p>
-        <p className="text-xs text-slate-500">JPG, PNG ou WebP, 4 Mo maximum. Cadrage portrait recommandé.</p>
-        {uploading && <p className="text-xs text-slate-500">Ajout de la photo en cours…</p>}
+        <p className="text-sm font-medium text-slate-700">
+          Photo de l&apos;agent
+        </p>
+
+        <p className="text-xs text-slate-500">
+          JPG, PNG ou WebP, 4 Mo maximum. Cadrage portrait recommandé.
+        </p>
+
+        {uploading && (
+          <p className="text-xs text-slate-500">
+            Envoi de la photo en cours…
+          </p>
+        )}
+
         {preview && !uploading && (
           <button
             type="button"
@@ -158,8 +169,14 @@ export function PhotoUploadField({ value, onChange, initials = "?", disabled }: 
             <X className="h-3 w-3" /> Retirer la photo
           </button>
         )}
-        {notice && <p className="text-xs text-emerald-700">{notice}</p>}
-        {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+
+        {notice && (
+          <p className="text-xs text-emerald-700">{notice}</p>
+        )}
+
+        {error && (
+          <p className="text-xs font-medium text-red-600">{error}</p>
+        )}
       </div>
     </div>
   );
